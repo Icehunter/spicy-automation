@@ -1,0 +1,25 @@
+elbAccountId: 123
+accountId: <accountId>
+privateSubnetA1: subnet-privateSubnetA1
+privateSubnetA2: subnet-privateSubnetA2
+privateSubnetB1: subnet-privateSubnetB1
+privateSubnetB2: subnet-privateSubnetB2
+privateSubnetC1: subnet-privateSubnetC1
+privateSubnetC2: subnet-privateSubnetC2
+privateSubnetD1: subnet-privateSubnetD1
+privateSubnetD2: subnet-privateSubnetD2
+publicSubnetA: subnet-publicSubnetA
+publicSubnetB: subnet-publicSubnetB
+publicSubnetC: subnet-publicSubnetC
+publicSubnetD: subnet-publicSubnetD
+region: us-east-1
+sslCertificateId: arn:aws:acm:us-east-1:<accountId>:certificate/<certificateId>
+vpcCidr: 172.1.0.0/16
+vpcId: vpc-<vpcId>
+# can be found at https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-optimized_AMI.html
+ecsAmiId: ami-03c47ceec818ebcb5
+jenkinsAwsCredentialsId: prod/aws/spicy-www
+ecrBaseRepository: <accountId>.dkr.ecr.us-east-1.amazonaws.com
+# this has to be lower case string for autospotting lib
+spotEnabled: "false"
+minOnDemandPercentage: 100

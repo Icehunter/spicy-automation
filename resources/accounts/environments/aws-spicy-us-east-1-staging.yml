@@ -1,0 +1,7 @@
+dnsRoute53HostedZoneId: <hostedZoneId>
+dnsRoute53ZoneBase: staging.web.spicy.com
+ec2KeyName: www-cluster-staging
+environmentName: staging
+shortEnvironmentName: staging
+spotEnabled: "true"
+minOnDemandPercentage: 10

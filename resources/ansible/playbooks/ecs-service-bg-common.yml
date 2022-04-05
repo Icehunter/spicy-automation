@@ -1,0 +1,50 @@
+- name: provision stack
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/ecs-service-bg-common.yml
+  # Pass a template parameter which uses Cloudformation's UsePreviousValue attribute
+  # When use_previous_value is set to True, the given value will be ignored and
+  # Cloudformation will use the value from a previously submitted template.
+  # If use_previous_value is set to False (default) the given value is used.
+  tasks:
+    - name: run cloudformation script for {{ environmentName }} environment
+      cloudformation:
+        stack_name: "{{ commonStackName }}"
+        state: present
+        region: "{{ region }}"
+        template: cloudformation/ecs-service-bg-common.yml
+        template_parameters:
+          # UseClusterALB:
+          #   value: "{{ useClusterAlb }}"
+          ENV:
+            value: "{{ environmentName }}"
+          HostName:
+            value: "{{ hostName }}"
+          DNSRoute53HostedZoneID:
+            value: "{{ dnsRoute53HostedZoneId }}"
+          ClusterName:
+            value: "{{ clusterName }}"
+          ExternalELBSecurityGroups:
+            value: "{{ externalElbSecurityGroups }}"
+          ALBScheme:
+            value: "{{ albScheme }}"
+          VPCExternalSubnets:
+            value: "{{ vpcExternalSubnets }}"
+          VPCInternalSubnets:
+            value: "{{ vpcInternalSubnets }}"
+          SSLCertificateID:
+            value: "{{ sslCertificateId }}"
+          ExternalFacingLoadBalancerIdleTimeout:
+            value: "{{ externalFacingLoadBalancerIdleTimeout }}"
+          InternalLoadBalancerIdleTimeout:
+            value: "{{ internalLoadBalancerIdleTimeout }}"
+        tags:
+          Owner: "{{ ownerTag }}"
+          Product: "{{ productTag }}"
+          Component: "{{ componentTag }}"
+          Environment: "{{ environmentName }}"
+          Build: "{{ build }}"
+          ChangeBranch: "{{ changeBranch }}"
+          BranchName: "{{ branchName }}"

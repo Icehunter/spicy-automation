@@ -1,0 +1,112 @@
+- name: provision ecs stack
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/ecs-cluster.yml
+  # Pass a template parameter which uses Cloudformation's UsePreviousValue attribute
+  # When use_previous_value is set to True, the given value will be ignored and
+  # Cloudformation will use the value from a previously submitted template.
+  # If use_previous_value is set to False (default) the given value is used.
+  tasks:
+    - name: "run cloudformation script for {{ environmentName }} cluster"
+      cloudformation:
+        stack_name: "{{ stackName }}"
+        state: present
+        region: "{{ region }}"
+        template: cloudformation/ecs-cluster.yml
+        template_parameters:
+          ELBAccountID:
+            value: "{{ elbAccountId }}"
+          ContainerInsights:
+            value: "{{ containerInsights }}"
+          OwnerTag:
+            value: "{{ ownerTag }}"
+          ProductTag:
+            value: "{{ productTag }}"
+          ComponentTag:
+            value: "{{ componentTag }}"
+          EnvironmentTag:
+            value: "{{ environmentName }}"
+          Build:
+            value: "{{ build }}"
+          InstanceType:
+            value: "{{ instanceType }}"
+          MinClusterSize:
+            value: "{{ minClusterSize }}"
+          MaxClusterSize:
+            value: "{{ maxClusterSize }}"
+          MaxBatchSize:
+            value: "{{ maxBatchSize }}"
+          LargestContainerCPUReservation:
+            value: "{{ largestContainerCpuReservation }}"
+          LargestContainerMemoryReservation:
+            value: "{{ largestContainerMemoryReservation }}"
+          ClusterScaleUpAdjustment:
+            value: "{{ clusterScaleUpAdjustment }}"
+          ClusterScaleUpAdjustmentType:
+            value: "{{ clusterScaleUpAdjustmentType }}"
+          ClusterScaleUpCooldown:
+            value: "{{ clusterScaleUpCooldown }}"
+          ClusterScaleUpMins:
+            value: "{{ clusterScaleUpMins }}"
+          ClusterScaleUpThreshold:
+            value: "{{ clusterScaleUpThreshold }}"
+          ClusterScaleDownAdjustment:
+            value: "{{ clusterScaleDownAdjustment }}"
+          ClusterScaleDownAdjustmentType:
+            value: "{{ clusterScaleDownAdjustmentType }}"
+          ClusterScaleDownCooldown:
+            value: "{{ clusterScaleDownCooldown }}"
+          ClusterScaleDownMins:
+            value: "{{ clusterScaleDownMins }}"
+          ClusterScaleDownThreshold:
+            value: "{{ clusterScaleDownThreshold }}"
+          VPCID:
+            value: "{{ vpcId }}"
+          ECSAMIID:
+            value: "{{ ecsAmiId }}"
+          EC2KeyName:
+            value: "{{ ec2KeyName }}"
+          AdditonalEC2SecurityGroups:
+            value: "{{ additonalEc2SecurityGroups }}"
+          ExternalELBSecurityGroups:
+            value: "{{ externalElbSecurityGroups }}"
+          EBSVolumeSize:
+            value: "{{ ebsVolumeSize }}"
+          CreateExternalFacingLoadBalancer:
+            value: "{{ createExternalFacingLoadBalancer }}"
+          CreateInternalLoadBalancer:
+            value: "{{ createInternalLoadBalancer }}"
+          VPCExternalSubnets:
+            value: "{{ vpcExternalSubnets }}"
+          VPCInternalSubnets:
+            value: "{{ vpcInternalSubnets }}"
+          SSLCertificateID:
+            value: "{{ sslCertificateId }}"
+          LogsS3BucketName:
+            value: "{{ logsS3BucketName }}"
+          PurgeS3LogsOnStackDelete:
+            value: "{{ purgeS3LogsOnStackDelete }}"
+          ASGTerminateTimeout:
+            value: "{{ asgTerminateTimeout }}"
+          ContainerDeviceManagerSize:
+            value: "{{ containerDeviceManagerSize }}"
+          ExternalFacingLoadBalancerIdleTimeout:
+            value: "{{ externalFacingLoadBalancerIdleTimeout }}"
+          InternalLoadBalancerIdleTimeout:
+            value: "{{ internalLoadBalancerIdleTimeout }}"
+          UserDataVersion:
+            value: "{{ userDataVersion }}"
+          Task1ToStartOnAllInstances:
+            value: "{{ task1ToStartOnAllInstances }}"
+          SpotEnabled:
+            value: "{{ spotEnabled }}"
+          MinOnDemandPercentage:
+            value: "{{ minOnDemandPercentage }}"
+        tags:
+          Owner: "{{ ownerTag }}"
+          Product: "{{ productTag }}"
+          Component: "{{ componentTag }}"
+          Environment: "{{ environmentName }}"
+          Build: "{{ build }}"
