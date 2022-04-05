@@ -1,0 +1,6 @@
+additonalEc2SecurityGroups: ""
+externalElbSecurityGroups: ""
+externalFacingLoadBalancerIdleTimeout: 60
+internalLoadBalancerIdleTimeout: 60
+vpcExternalSubnets: ""
+vpcInternalSubnets: ""

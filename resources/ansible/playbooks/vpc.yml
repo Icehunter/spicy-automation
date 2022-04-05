@@ -1,0 +1,73 @@
+- name: provision vpc stack
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/vpc.yml
+  # Pass a template parameter which uses Cloudformation's UsePreviousValue attribute
+  # When use_previous_value is set to True, the given value will be ignored and
+  # Cloudformation will use the value from a previously submitted template.
+  # If use_previous_value is set to False (default) the given value is used.
+  tasks:
+    - name: run cloudformation script to create vpc
+      cloudformation:
+        stack_name: "{{ stackName }}"
+        state: present
+        region: "{{ region }}"
+        template: cloudformation/vpc.yml
+        template_parameters:
+          OwnerTag:
+            value: "{{ ownerTag }}"
+          ProductTag:
+            value: "{{ productTag }}"
+          ComponentTag:
+            value: "{{ componentTag }}"
+          BuildTag:
+            value: "{{ build }}"
+          AvailabilityZones:
+            value: "{{ availabilityZones }}"
+          CreateAdditionalPrivateSubnets:
+            value: "{{ createAdditionalPrivateSubnets }}"
+          CreatePrivateSubnets:
+            value: "{{ createPrivateSubnets }}"
+          NumberOfAZs:
+            value: "{{ numberOfAzs }}"
+          PrivateSubnetA1CIDR:
+            value: "{{ privateSubnetA1Cidr }}"
+          PrivateSubnetA2CIDR:
+            value: "{{ privateSubnetA2Cidr }}"
+          PrivateSubnetB1CIDR:
+            value: "{{ privateSubnetB1Cidr }}"
+          PrivateSubnetB2CIDR:
+            value: "{{ privateSubnetB2Cidr }}"
+          PrivateSubnetC1CIDR:
+            value: "{{ privateSubnetC1Cidr }}"
+          PrivateSubnetC2CIDR:
+            value: "{{ privateSubnetC2Cidr }}"
+          PrivateSubnetD1CIDR:
+            value: "{{ privateSubnetD1Cidr }}"
+          PrivateSubnetD2CIDR:
+            value: "{{ privateSubnetD2Cidr }}"
+          PrivateSubnetATag:
+            value: "{{ privateSubnetATag }}"
+          PrivateSubnetBTag:
+            value: "{{ privateSubnetBTag }}"
+          PublicSubnetACIDR:
+            value: "{{ publicSubnetACidr }}"
+          PublicSubnetBCIDR:
+            value: "{{ publicSubnetBCidr }}"
+          PublicSubnetCCIDR:
+            value: "{{ publicSubnetCCidr }}"
+          PublicSubnetDCIDR:
+            value: "{{ publicSubnetDCidr }}"
+          PublicSubnetTag:
+            value: "{{ publicSubnetTag }}"
+          VPCCIDR:
+            value: "{{ vpcCidr }}"
+          VPCTenancy:
+            value: "{{ vpcTenancy }}"
+        tags:
+          Owner: "{{ ownerTag }}"
+          Product: "{{ productTag }}"
+          Component: "{{ componentTag }}"
+          Build: "{{ build }}"

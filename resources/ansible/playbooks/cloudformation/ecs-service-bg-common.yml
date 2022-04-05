@@ -1,0 +1,493 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: >
+  ECS Service Common Blue/Green DNS/Route53
+
+Parameters:
+  # UseClusterALB:
+  #   Description: Use the shared cluster resources vs creating isolated ALB
+  #   Type: String
+  #   AllowedValues:
+  #     - true
+  #     - false
+  #   Default: false
+  ENV:
+    Description: Envrironment name
+    Type: String
+  HostName:
+    Description: FQDN Host name for R53 record
+    Type: String
+  DNSRoute53HostedZoneID:
+    Description: Domain's ZoneID in R3
+    Type: String
+  ClusterName:
+    Type: String
+  ExternalELBSecurityGroups:
+    Description: >-
+      Optional comma separated list of internet facing security groups to add to
+      the LoadBalancer to make it restricted.
+    Type: String
+    Default: ""
+  ALBScheme:
+    Description: Determines in conjuction with UseClusterALB whether to create (or use) internal or external ALB/Listeners
+    Type: String
+    Default: ""
+  VPCExternalSubnets:
+    Description: >-
+      Subnets that the internet-facing load balancers will use.
+    Type: "List<AWS::EC2::Subnet::Id>"
+  VPCInternalSubnets:
+    Description: >-
+      Subnets that the internal load balancers will use.
+    Type: "List<AWS::EC2::Subnet::Id>"
+  SSLCertificateID:
+    Description: SSL Certificate ID for the HTTPS load balancer(s).
+    Type: String
+  ExternalFacingLoadBalancerIdleTimeout:
+    Description: Idle Timeout for load balancer requests
+    Type: Number
+    Default: 60
+  InternalLoadBalancerIdleTimeout:
+    Description: Idle Timeout for load balancer requests
+    Type: Number
+    Default: 60
+
+Conditions:
+  HasExternalELBSecurityGroups: !Not
+    - !Equals
+      - !Ref ExternalELBSecurityGroups
+      - ""
+  # HasLoadBalancerSecurityGroup: !And
+  #   - !Equals
+  #     - !Ref UseClusterALB
+  #     - false
+  #   - !Or
+  #     - !Equals
+  #       - !Ref ALBScheme
+  #       - "internal"
+  #     - !Equals
+  #       - !Ref ALBScheme
+  #       - "internet-facing"
+  HasInternalLoadBalancer: !Equals
+    - !Ref ALBScheme
+    - "internal"
+  # HasInternalLoadBalancer: !And
+  #   - !Equals
+  #     - !Ref UseClusterALB
+  #     - false
+  #   - !Equals
+  #     - !Ref ALBScheme
+  #     - "internal"
+  # HasInternalClusterLoadBalancer: !And
+  #   - !Equals
+  #     - !Ref UseClusterALB
+  #     - true
+  #   - !Equals
+  #     - !Ref ALBScheme
+  #     - "internal"
+  HasExternalFacingLoadBalancer: !Equals
+    - !Ref ALBScheme
+    - "internet-facing"
+  # HasExternalFacingLoadBalancer: !And
+  #   - !Equals
+  #     - !Ref UseClusterALB
+  #     - false
+  #   - !Equals
+  #     - !Ref ALBScheme
+  #     - "internet-facing"
+  # HasExternalFacingClusterLoadBalancer: !And
+  #   - !Equals
+  #     - !Ref UseClusterALB
+  #     - true
+  #   - !Equals
+  #     - !Ref ALBScheme
+  #     - "internet-facing"
+
+Resources:
+  ExternalCommonDNS:
+    Type: AWS::Route53::RecordSetGroup
+    Condition: HasExternalFacingLoadBalancer
+    Properties:
+      HostedZoneId: !Ref DNSRoute53HostedZoneID
+      RecordSets:
+        - Name: !Ref HostName
+          Type: A
+          AliasTarget:
+            DNSName: !GetAtt ExternalFacingLoadBalancer.DNSName
+            HostedZoneId: !GetAtt ExternalFacingLoadBalancer.CanonicalHostedZoneID
+          Region: !Ref AWS::Region
+          SetIdentifier: !Sub "${ENV}-${AWS::Region}"
+
+  # ExternalClusterDNS:
+  #   Type: AWS::Route53::RecordSetGroup
+  #   Condition: HasExternalFacingClusterLoadBalancer
+  #   Properties:
+  #     HostedZoneId: !Ref DNSRoute53HostedZoneID
+  #     RecordSets:
+  #       - Name: !Ref HostName
+  #         Type: A
+  #         AliasTarget:
+  #           DNSName:
+  #             Fn::ImportValue: !Sub "${ClusterName}-internet-facing-url"
+  #           HostedZoneId:
+  #             Fn::ImportValue: !Sub "${ClusterName}-internet-facing-hosted-zone-id"
+  #         Region: !Ref AWS::Region
+  #         SetIdentifier: !Sub "${ENV}-${AWS::Region}"
+
+  ExternalCommonInActiveDNS:
+    Type: AWS::Route53::RecordSetGroup
+    Condition: HasExternalFacingLoadBalancer
+    Properties:
+      HostedZoneId: !Ref DNSRoute53HostedZoneID
+      RecordSets:
+        - Name: !Sub "inactive-${HostName}"
+          Type: A
+          AliasTarget:
+            DNSName: !GetAtt ExternalFacingLoadBalancer.DNSName
+            HostedZoneId: !GetAtt ExternalFacingLoadBalancer.CanonicalHostedZoneID
+          Region: !Ref AWS::Region
+          SetIdentifier: !Sub "${ENV}-${AWS::Region}"
+
+  # ExternalClusterInActiveDNS:
+  #   Type: AWS::Route53::RecordSetGroup
+  #   Condition: HasExternalFacingClusterLoadBalancer
+  #   Properties:
+  #     HostedZoneId: !Ref DNSRoute53HostedZoneID
+  #     RecordSets:
+  #       - Name: !Sub "inactive-${HostName}"
+  #         Type: A
+  #         AliasTarget:
+  #           DNSName:
+  #             Fn::ImportValue: !Sub "${ClusterName}-internet-facing-url"
+  #           HostedZoneId:
+  #             Fn::ImportValue: !Sub "${ClusterName}-internet-facing-hosted-zone-id"
+  #         Region: !Ref AWS::Region
+  #         SetIdentifier: !Sub "${ENV}-${AWS::Region}"
+
+  InternalCommonDNS:
+    Type: AWS::Route53::RecordSetGroup
+    Condition: HasInternalLoadBalancer
+    Properties:
+      HostedZoneId: !Ref DNSRoute53HostedZoneID
+      RecordSets:
+        - Name: !Ref HostName
+          Type: A
+          AliasTarget:
+            DNSName: !GetAtt InternalLoadBalancer.DNSName
+            HostedZoneId: !GetAtt InternalLoadBalancer.CanonicalHostedZoneID
+          Region: !Ref AWS::Region
+          SetIdentifier: !Sub "${ENV}-${AWS::Region}"
+
+  # InternalClusterDNS:
+  #   Type: AWS::Route53::RecordSetGroup
+  #   Condition: HasInternalClusterLoadBalancer
+  #   Properties:
+  #     HostedZoneId: !Ref DNSRoute53HostedZoneID
+  #     RecordSets:
+  #       - Name: !Ref HostName
+  #         Type: A
+  #         AliasTarget:
+  #           DNSName:
+  #             Fn::ImportValue: !Sub "${ClusterName}-internal-url"
+  #           HostedZoneId:
+  #             Fn::ImportValue: !Sub "${ClusterName}-internal-hosted-zone-id"
+  #         Region: !Ref AWS::Region
+  #         SetIdentifier: !Sub "${ENV}-${AWS::Region}"
+
+  InternalCommonInActiveDNS:
+    Type: AWS::Route53::RecordSetGroup
+    Condition: HasInternalLoadBalancer
+    Properties:
+      HostedZoneId: !Ref DNSRoute53HostedZoneID
+      RecordSets:
+        - Name: !Sub "inactive-${HostName}"
+          Type: A
+          AliasTarget:
+            DNSName: !GetAtt InternalLoadBalancer.DNSName
+            HostedZoneId: !GetAtt InternalLoadBalancer.CanonicalHostedZoneID
+          Region: !Ref AWS::Region
+          SetIdentifier: !Sub "${ENV}-${AWS::Region}"
+
+  # InternalClusterInActiveDNS:
+  #   Type: AWS::Route53::RecordSetGroup
+  #   Condition: HasInternalClusterLoadBalancer
+  #   Properties:
+  #     HostedZoneId: !Ref DNSRoute53HostedZoneID
+  #     RecordSets:
+  #       - Name: !Sub "inactive-${HostName}"
+  #         Type: A
+  #         AliasTarget:
+  #           DNSName:
+  #             Fn::ImportValue: !Sub "${ClusterName}-internal-url"
+  #           HostedZoneId:
+  #             Fn::ImportValue: !Sub "${ClusterName}-internal-hosted-zone-id"
+  #         Region: !Ref AWS::Region
+  #         SetIdentifier: !Sub "${ENV}-${AWS::Region}"
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    # Condition: HasLoadBalancerSecurityGroup
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W2
+            reason: "This is a public facing ELB and all traffic should be permitted."
+          - id: W5
+            reason: "This is a public facing ELB and all traffic should be permitted."
+          - id: W9
+            reason: "This is a public facing ELB and all traffic should be permitted."
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub "${ClusterName}-VPC"
+      GroupDescription: Access to the load balancer that sits in front of ECS
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: "-1"
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: "-1"
+
+  ExternalFacingLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Condition: HasExternalFacingLoadBalancer
+    Properties:
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: !Ref ExternalFacingLoadBalancerIdleTimeout
+        - Key: access_logs.s3.enabled
+          Value: "true"
+        - Key: access_logs.s3.bucket
+          Value:
+            Fn::ImportValue: !Sub "${ClusterName}-logs-s3-bucket"
+        - Key: access_logs.s3.prefix
+          Value: !Sub ${AWS::StackName}-internet-facing
+      Subnets: !Ref VPCExternalSubnets
+      Scheme: internet-facing
+      SecurityGroups:
+        Fn::If:
+          - HasExternalELBSecurityGroups
+          - !Split [",", !Ref ExternalELBSecurityGroups]
+          - !Split [",", !Ref LoadBalancerSecurityGroup]
+
+  ExternalFacingLoadBalancerHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasExternalFacingLoadBalancer
+    Properties:
+      LoadBalancerArn: !Ref ExternalFacingLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref ExternalDefaultTargetGroup
+                Weight: 100
+
+  ExternalFacingLoadBalancerHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasExternalFacingLoadBalancer
+    Properties:
+      LoadBalancerArn: !Ref ExternalFacingLoadBalancer
+      Certificates:
+        - CertificateArn: !Ref SSLCertificateID
+      Port: 443
+      Protocol: HTTPS
+      DefaultActions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref ExternalDefaultTargetGroup
+                Weight: 100
+
+  InternalLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Condition: HasInternalLoadBalancer
+    Properties:
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: !Ref InternalLoadBalancerIdleTimeout
+        - Key: access_logs.s3.enabled
+          Value: "true"
+        - Key: access_logs.s3.bucket
+          Value:
+            Fn::ImportValue: !Sub "${ClusterName}-logs-s3-bucket"
+        - Key: access_logs.s3.prefix
+          Value: !Sub ${AWS::StackName}-internal-facing
+      Subnets: !Ref VPCInternalSubnets
+      Scheme: internal
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup
+
+  InternalLoadBalancerHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasInternalLoadBalancer
+    Properties:
+      LoadBalancerArn: !Ref InternalLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref InternalDefaultTargetGroup
+                Weight: 100
+
+  InternalLoadBalancerHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasInternalLoadBalancer
+    Properties:
+      LoadBalancerArn: !Ref InternalLoadBalancer
+      Certificates:
+        - CertificateArn: !Ref SSLCertificateID
+      Port: 443
+      Protocol: HTTPS
+      DefaultActions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref InternalDefaultTargetGroup
+                Weight: 100
+
+  # Default target groups
+  ExternalDefaultTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: HasExternalFacingLoadBalancer
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub "${ClusterName}-VPC"
+      Port: 80
+      Protocol: HTTP
+      Matcher:
+        HttpCode: "301"
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 5
+
+  InternalDefaultTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: HasInternalLoadBalancer
+    Properties:
+      VpcId:
+        Fn::ImportValue: !Sub "${ClusterName}-VPC"
+      Port: 80
+      Protocol: HTTP
+      Matcher:
+        HttpCode: "301"
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 5
+
+  ExternalHTTPDefaultRedirect:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: HasExternalFacingLoadBalancer
+    Properties:
+      Actions:
+        - Type: redirect
+          RedirectConfig:
+            Port: "443"
+            Protocol: HTTPS
+            StatusCode: HTTP_301
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "*"
+      ListenerArn: !Ref ExternalFacingLoadBalancerHTTPListener
+      Priority: 50000
+
+  InternalHTTPDefaultRedirect:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Condition: HasInternalLoadBalancer
+    Properties:
+      Actions:
+        - Type: redirect
+          RedirectConfig:
+            Port: "443"
+            Protocol: HTTPS
+            StatusCode: HTTP_301
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "*"
+      ListenerArn: !Ref InternalLoadBalancerHTTPListener
+      Priority: 50000
+
+Outputs:
+  ExternalFacingLoadBalancerUrl:
+    Description: The URL of the ALB
+    Condition: HasExternalFacingLoadBalancer
+    Value: !GetAtt ExternalFacingLoadBalancer.DNSName
+    Export:
+      Name: !Sub ${AWS::StackName}-internet-facing-url
+
+  ExternalFacingLoadBalancerFullName:
+    Description: The full name of the ALB
+    Condition: HasExternalFacingLoadBalancer
+    Value: !GetAtt ExternalFacingLoadBalancer.LoadBalancerFullName
+    Export:
+      Name: !Sub ${AWS::StackName}-internet-facing-full-name
+
+  ExternalFacingLoadBalancerHostedZoneId:
+    Description:
+      The ID of the Amazon Route 53 hosted zone associated with the internet-facing
+      load balancer.
+    Condition: HasExternalFacingLoadBalancer
+    Value: !GetAtt ExternalFacingLoadBalancer.CanonicalHostedZoneID
+    Export:
+      Name: !Sub ${AWS::StackName}-internet-facing-hosted-zone-id
+
+  ExternalHTTPListener:
+    Description: A reference to the internet-facing HTTP listener
+    Condition: HasExternalFacingLoadBalancer
+    Value: !Ref ExternalFacingLoadBalancerHTTPListener
+    Export:
+      Name: !Sub ${AWS::StackName}-internet-facing-http-listener
+
+  ExternalHTTPSListener:
+    Description: A reference to the internet-facing HTTPS listener
+    Condition: HasExternalFacingLoadBalancer
+    Value: !Ref ExternalFacingLoadBalancerHTTPSListener
+    Export:
+      Name: !Sub ${AWS::StackName}-internet-facing-https-listener
+
+  InternalLoadBalancerUrl:
+    Description: The URL of the ALB
+    Condition: HasInternalLoadBalancer
+    Value: !GetAtt InternalLoadBalancer.DNSName
+    Export:
+      Name: !Sub ${AWS::StackName}-internal-url
+
+  InternalLoadBalancerFullName:
+    Description: The full name of the ALB
+    Condition: HasInternalLoadBalancer
+    Value: !GetAtt InternalLoadBalancer.LoadBalancerFullName
+    Export:
+      Name: !Sub ${AWS::StackName}-internal-full-name
+
+  InternalLoadBalancerHostedZoneId:
+    Description:
+      The ID of the Amazon Route 53 hosted zone associated with the internal load
+      balancer.
+    Condition: HasInternalLoadBalancer
+    Value: !GetAtt InternalLoadBalancer.CanonicalHostedZoneID
+    Export:
+      Name: !Sub ${AWS::StackName}-internal-hosted-zone-id
+
+  InternalHTTPListener:
+    Description: A reference to the internal HTTP listener
+    Condition: HasInternalLoadBalancer
+    Value: !Ref InternalLoadBalancerHTTPListener
+    Export:
+      Name: !Sub ${AWS::StackName}-internal-http-listener
+
+  InternalHTTPSListener:
+    Description: A reference to the internal HTTPS listener
+    Condition: HasInternalLoadBalancer
+    Value: !Ref InternalLoadBalancerHTTPSListener
+    Export:
+      Name: !Sub ${AWS::StackName}-internal-https-listener

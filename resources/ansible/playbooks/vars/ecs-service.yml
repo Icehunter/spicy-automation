@@ -1,0 +1,11 @@
+desiredCount: 2
+minCapacity: 2
+maxCapacity: 4
+cpu: 256
+memory: 512
+containerPort: 3000
+newRelicLicenseKey: ''
+albPriority: 100
+targetGroupStickinessEnabled: true
+targetGroupLBCookieDurationSecs: 86400
+healthCheckUrl: /ping

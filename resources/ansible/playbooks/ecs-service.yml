@@ -1,0 +1,78 @@
+- name: provision stack
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - vars/ecs-service.yml
+  # Pass a template parameter which uses Cloudformation's UsePreviousValue attribute
+  # When use_previous_value is set to True, the given value will be ignored and
+  # Cloudformation will use the value from a previously submitted template.
+  # If use_previous_value is set to False (default) the given value is used.
+  tasks:
+    - name: compile ecs service
+      template:
+        src: 'templates/ecs-service.yml'
+        dest: 'cloudformation/ecs-service.yml'
+    - name: 'run cloudformation script for {{ environmentName }} environment'
+      cloudformation:
+        stack_name: '{{ serviceStackName }}'
+        state: present
+        region: '{{ region }}'
+        template: cloudformation/ecs-service.yml
+        template_parameters:
+          # AccountID:
+          #   value: "{{ accountId }}"
+          # UseClusterALB:
+          #   value: "{{ useClusterAlb }}"
+          # ENV:
+          #   value: "{{ environmentName }}"
+          # ServiceName:
+          #   value: "{{ serviceName }}"
+          # ECRImageID:
+          #   value: "{{ ecrImageId }}"
+          ClusterName:
+            value: '{{ clusterName }}'
+          CommonStackName:
+            value: '{{ commonStackName }}'
+          HealthCheckURL:
+            value: '{{ healthCheckUrl }}'
+          HostName:
+            value: '{{ hostName }}'
+          # Build:
+          #   value: "{{ build }}"
+          # ChangeBranch:
+          #   value: "{{ changeBranch }}"
+          # BranchName:
+          #   value: "{{ branchName }}"
+          DesiredCount:
+            value: '{{ desiredCount }}'
+          MinCapacity:
+            value: '{{ minCapacity }}'
+          MaxCapacity:
+            value: '{{ maxCapacity }}'
+          # CPU:
+          #   value: "{{ cpu }}"
+          # Memory:
+          #   value: "{{ memory }}"
+          ContainerName:
+            value: '{{ containerName }}'
+          ContainerPort:
+            value: '{{ containerPort }}'
+          # NodeEnv:
+          #   value: "{{ nodeEnv }}"
+          # NodeConfigEnv:
+          #   value: "{{ nodeConfigEnv }}"
+          # NewRelicLicenseKey:
+          #   value: "{{ newRelicLicenseKey }}"
+          ALBScheme:
+            value: '{{ albScheme }}'
+          ALBPriority:
+            value: '{{ albPriority }}'
+        tags:
+          Owner: '{{ ownerTag }}'
+          Product: '{{ productTag }}'
+          Component: '{{ componentTag }}'
+          Environment: '{{ environmentName }}'
+          Build: '{{ build }}'
+          ChangeBranch: '{{ changeBranch }}'
+          BranchName: '{{ branchName }}'

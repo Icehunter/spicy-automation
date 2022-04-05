@@ -1,0 +1,7 @@
+dnsRoute53HostedZoneId: <hostedZoneId>
+dnsRoute53ZoneBase: production.web.spicy.com
+ec2KeyName: www-cluster-production
+environmentName: production
+shortEnvironmentName: prod
+spotEnabled: "false"
+minOnDemandPercentage: 100

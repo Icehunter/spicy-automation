@@ -1,0 +1,326 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: >
+  ECS Service & Task with autoscaling based on memory and CPU utilization. Template
+  supports adding new up to 10 listener rules for the supplied listener ARN
+
+Parameters:
+  # AccountID:
+  #   Type: String
+  # UseClusterALB:
+  #   Description: Use the shared cluster resources vs creating isolated ALB
+  #   Type: String
+  #   AllowedValues:
+  #     - true
+  #     - false
+  #   Default: false
+  # ENV:
+  #   Type: String
+  # ServiceName:
+  #   Type: String
+  #   Description: ECS service name
+  # ECRImageID:
+  #   Type: String
+  ClusterName:
+    Type: String
+  CommonStackName:
+    Type: String
+  HealthCheckURL:
+    Type: String
+  HostName:
+    Type: String
+  # Build:
+  #   Type: String
+  # ChangeBranch:
+  #   Type: String
+  # BranchName:
+  #   Type: String
+  DesiredCount:
+    Type: Number
+  MinCapacity:
+    Type: Number
+  MaxCapacity:
+    Type: Number
+  # CPU:
+  #   Type: Number
+  # Memory:
+  #   Type: Number
+  ContainerName:
+    Type: String
+  ContainerPort:
+    Type: Number
+  # NodeEnv:
+  #   Type: String
+  # NodeConfigEnv:
+  #   Type: String
+  # NewRelicLicenseKey:
+  #   Type: String
+  #   Default: ""
+  ALBScheme:
+    Type: String
+  ALBPriority:
+    Type: Number
+    Description: ALB Priority
+    Default: 100
+  TargetGroupStickinessEnabled:
+    Description: Whether or not session stickiness is enabled at the ALB
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Default: true
+  TargetGroupLBCookieDurationSecs:
+    Description: How long sticky session token should live
+    Type: Number
+    Default: 86400
+
+Conditions:
+  # UsingClusterALB: !Equals
+  #   - !Ref UseClusterALB
+  #   - true
+  SetDesiredCount: !Not [!Equals [!Ref DesiredCount, ""]]
+
+Resources:
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Role blocks access to all API in AWS except AssumeRole which is needed by ECS Tasks to deploy
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: !Sub "${AWS::StackName}-task-role"
+          PolicyDocument:
+{% filter indent(width=12, first=True) %}
+{% include 'iam-policy.yml' %}
+{% endfilter %}
+
+
+  HTTPRedirectListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: redirect
+          RedirectConfig:
+            Host: !Ref HostName
+            Port: "443"
+            Protocol: HTTPS
+            StatusCode: HTTP_301
+      Conditions:
+        - Field: host-header
+          Values:
+            - !Ref HostName
+      ListenerArn:
+        Fn::ImportValue: !Sub "${CommonStackName}-${ALBScheme}-http-listener"
+        # Fn::If:
+        #   - UsingClusterALB
+        #   - Fn::ImportValue: !Sub "${ClusterName}-${ALBScheme}-http-listener"
+        #   - Fn::ImportValue: !Sub "${CommonStackName}-${ALBScheme}-http-listener"
+      Priority: !Ref ALBPriority
+
+  HTTPSListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref TargetGroup
+                Weight: 100
+      Conditions:
+        - Field: host-header
+          Values:
+            - !Ref HostName
+      ListenerArn:
+        Fn::ImportValue: !Sub "${CommonStackName}-${ALBScheme}-https-listener"
+        # Fn::If:
+        #   - UsingClusterALB
+        #   - Fn::ImportValue: !Sub "${ClusterName}-${ALBScheme}-https-listener"
+        #   - Fn::ImportValue: !Sub "${CommonStackName}-${ALBScheme}-https-listener"
+      Priority: !Ref ALBPriority
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 15
+      HealthCheckPath: !Ref HealthCheckURL
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 14
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 7
+      Port: 80
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "60"
+        - Key: stickiness.enabled
+          Value: !Ref TargetGroupStickinessEnabled
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: !Ref TargetGroupLBCookieDurationSecs
+      VpcId:
+        Fn::ImportValue: !Sub "${ClusterName}-VPC"
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ClusterName
+      Role: ecsServiceRole
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+      PlacementStrategies:
+        - Type: spread
+          Field: attribute:ecs.availability-zone
+        - Type: spread
+          Field: instanceId
+      LoadBalancers:
+        - ContainerName: !Ref ContainerName
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref TargetGroup
+      DesiredCount:
+        Fn::If:
+          - SetDesiredCount
+          - !Ref DesiredCount
+          - !Ref "AWS::NoValue"
+      TaskDefinition: !Ref TaskDefinition
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      NetworkMode: bridge
+      TaskRoleArn: !Ref TaskRole
+      ExecutionRoleArn: !GetAtt TaskRole.Arn
+{% filter indent(width=6, first=True) %}
+{% include 'Dockerrun.aws.yml' %}
+{% endfilter %}
+
+
+  ScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Role allows autoscale on service from alarms and metrics
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - application-autoscaling.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: !Sub "${AWS::StackName}-scaling-role"
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - application-autoscaling:*
+                  - ecs:RunTask
+                  - ecs:UpdateSerice
+                  - ecs:DescribeServices
+                  - cloudwatch:PutMetricAlarm
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:SetAlarmState
+                  - cloudwatch:DeleteAlarms
+                Resource: "*"
+
+  ScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: !Ref MaxCapacity
+      MinCapacity: !Ref MinCapacity
+      ScalableDimension: "ecs:service:DesiredCount"
+      ServiceNamespace: ecs
+      ResourceId: !Sub "service/${ClusterName}/${Service.Name}"
+      RoleARN: !GetAtt ScalingRole.Arn
+
+  CPUUtilizationScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${AWS::StackName}-cpu-scaling-policy"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        DisableScaleIn: true
+        TargetValue: 50
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 300
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+
+  MemoryUtilizationScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${AWS::StackName}-memory-scaling-policy"
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        DisableScaleIn: true
+        TargetValue: 80
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 300
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+
+  RequestsScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${AWS::StackName}-requests-scaling-policy"
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ScalableTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 300
+        MetricAggregationType: Average
+        StepAdjustments:
+          - MetricIntervalLowerBound: 0 # out Lower + Threshold
+            ScalingAdjustment: 2
+          - MetricIntervalLowerBound: -150 # in Lower + Threshold
+            MetricIntervalUpperBound: 0 # out Upper + Threshold
+            ScalingAdjustment: 0
+          - MetricIntervalUpperBound: -150 # in Upper + Threshold
+            ScalingAdjustment: -1
+
+  RequestsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref RequestsScalingPolicy
+      OKActions:
+        - !Ref RequestsScalingPolicy
+      AlarmDescription: Alarm if RequestCount is too high
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: TargetGroup
+          Value: !Sub "${TargetGroup.TargetGroupFullName}"
+        - Name: LoadBalancer
+          Value:
+            Fn::ImportValue: !Sub "${CommonStackName}-${ALBScheme}-full-name"
+            # Fn::If:
+            #   - UsingClusterALB
+            #   - Fn::ImportValue: !Sub "${ClusterName}-${ALBScheme}-full-name"
+            #   - Fn::ImportValue: !Sub "${CommonStackName}-${ALBScheme}-full-name"
+      EvaluationPeriods: 5
+      MetricName: RequestCountPerTarget
+      Namespace: AWS/ApplicationELB
+      Period: 60
+      Statistic: Sum
+      Threshold: 300
+
+Outputs:
+  TargetGroup:
+    Description: Service Target Group
+    Value: !Ref TargetGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-target-group
